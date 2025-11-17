@@ -179,6 +179,10 @@ move, brain, trainer와 독립적으로 작동하는 서브 기능.
 # 현재 시각
 python3 control/clock.py time
 
+# 현재 날씨 (위치 기반)
+python clock.py weather
+> Seoul 6°C, Sunny, 습도 33%
+
 # 알람 추가
 python3 control/clock.py add 08:00 모닝콜
 
