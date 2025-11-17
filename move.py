@@ -1,93 +1,88 @@
-import json
+# move.py
 import RPi.GPIO as GPIO
 import time
+import json
 
-class Motor:
-    def __init__(self, in1, in2, pwm_pin, pwm_freq=1000):
-        self.in1 = in1
-        self.in2 = in2
-        self.pwm_pin = pwm_pin
-        GPIO.setup(self.in1, GPIO.OUT)
-        GPIO.setup(self.in2, GPIO.OUT)
-        GPIO.setup(self.pwm_pin, GPIO.OUT)
-        self.pwm = GPIO.PWM(self.pwm_pin, pwm_freq)
-        self.pwm.start(0)
+GPIO.setmode(GPIO.BCM)
 
-    def forward(self, speed):
-        GPIO.output(self.in1, GPIO.HIGH)
-        GPIO.output(self.in2, GPIO.LOW)
-        self.pwm.ChangeDutyCycle(speed)
+# motorConfig.json 불러오기
+with open("motorConfig.json", "r") as f:
+    cfg = json.load(f)
 
-    def backward(self, speed):
-        GPIO.output(self.in1, GPIO.LOW)
-        GPIO.output(self.in2, GPIO.HIGH)
-        self.pwm.ChangeDutyCycle(speed)
+LEFT_IN1  = cfg["LEFT"]["IN1"]
+LEFT_IN2  = cfg["LEFT"]["IN2"]
+LEFT_PWM  = cfg["LEFT"]["PWM"]
 
-    def stop(self):
-        self.pwm.ChangeDutyCycle(0)
-        GPIO.output(self.in1, GPIO.LOW)
-        GPIO.output(self.in2, GPIO.LOW)
+RIGHT_IN1 = cfg["RIGHT"]["IN1"]
+RIGHT_IN2 = cfg["RIGHT"]["IN2"]
+RIGHT_PWM = cfg["RIGHT"]["PWM"]
 
-    def cleanup(self):
-        try:
-            self.pwm.stop()
-        except:
-            pass
+# GPIO 핀 세팅
+GPIO.setup(LEFT_IN1, GPIO.OUT)
+GPIO.setup(LEFT_IN2, GPIO.OUT)
+GPIO.setup(LEFT_PWM, GPIO.OUT)
+
+GPIO.setup(RIGHT_IN1, GPIO.OUT)
+GPIO.setup(RIGHT_IN2, GPIO.OUT)
+GPIO.setup(RIGHT_PWM, GPIO.OUT)
+
+pwm_left  = GPIO.PWM(LEFT_PWM, 1000)
+pwm_right = GPIO.PWM(RIGHT_PWM, 1000)
+
+pwm_left.start(0)
+pwm_right.start(0)
 
 
-class MotorController:
-    def __init__(self, config_path):
-        GPIO.setmode(GPIO.BCM)
-        with open(config_path, "r") as f:
-            cfg = json.load(f)
+def set_left(direction, speed):
+    if direction == "F":
+        GPIO.output(LEFT_IN1, GPIO.HIGH)
+        GPIO.output(LEFT_IN2, GPIO.LOW)
+    elif direction == "B":
+        GPIO.output(LEFT_IN1, GPIO.LOW)
+        GPIO.output(LEFT_IN2, GPIO.HIGH)
+    else:
+        GPIO.output(LEFT_IN1, GPIO.LOW)
+        GPIO.output(LEFT_IN2, GPIO.LOW)
 
-        self.stby = cfg["STBY"]
-        GPIO.setup(self.stby, GPIO.OUT)
-        GPIO.output(self.stby, GPIO.HIGH)
-
-        L = cfg["LEFT"]
-        R = cfg["RIGHT"]
-
-        self.left_motor = Motor(L["AIN1"], L["AIN2"], L["PWM"])
-        self.right_motor = Motor(R["BIN1"], R["BIN2"], R["PWM"])
-
-    def forward(self, speed=50):
-        self.left_motor.forward(speed)
-        self.right_motor.forward(speed)
-
-    def backward(self, speed=50):
-        self.left_motor.backward(speed)
-        self.right_motor.backward(speed)
-
-    def turn_left(self, speed=50):
-        self.left_motor.backward(speed)
-        self.right_motor.forward(speed)
-
-    def turn_right(self, speed=50):
-        self.left_motor.forward(speed)
-        self.right_motor.backward(speed)
-
-    def stop(self):
-        self.left_motor.stop()
-        self.right_motor.stop()
-
-    def cleanup(self):
-        self.left_motor.cleanup()
-        self.right_motor.cleanup()
-        GPIO.cleanup()
+    pwm_left.ChangeDutyCycle(speed)
 
 
-if __name__ == "__main__":
-    motor = MotorController("motorConfig.json")
-    try:
-        motor.forward(60)
-        time.sleep(2)
-        motor.backward(60)
-        time.sleep(2)
-        motor.turn_left(60)
-        time.sleep(1)
-        motor.turn_right(60)
-        time.sleep(1)
-        motor.stop()
-    finally:
-        motor.cleanup()
+def set_right(direction, speed):
+    if direction == "F":
+        GPIO.output(RIGHT_IN1, GPIO.HIGH)
+        GPIO.output(RIGHT_IN2, GPIO.LOW)
+    elif direction == "B":
+        GPIO.output(RIGHT_IN1, GPIO.LOW)
+        GPIO.output(RIGHT_IN2, GPIO.HIGH)
+    else:
+        GPIO.output(RIGHT_IN1, GPIO.LOW)
+        GPIO.output(RIGHT_IN2, GPIO.LOW)
+
+    pwm_right.ChangeDutyCycle(speed)
+
+
+def forward(speed=50):
+    set_left("F", speed)
+    set_right("F", speed)
+
+
+def backward(speed=50):
+    set_left("B", speed)
+    set_right("B", speed)
+
+
+def left(speed=40):
+    # 제자리 회전
+    set_left("B", speed)
+    set_right("F", speed)
+
+
+def right(speed=40):
+    # 제자리 회전
+    set_left("F", speed)
+    set_right("B", speed)
+
+
+def stop():
+    set_left("S", 0)
+    set_right("S", 0)
