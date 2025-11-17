@@ -1,6 +1,4 @@
-# pi2
-
-# Raspberry Pi Autonomous Tiny-RNN Robot
+# Tiny-RNN
 
 이 프로젝트는 라즈베리파이 기반의 초경량 RNN(진화전략 기반) 로봇 제어 시스템입니다.  
 센서 입력(거리, 사물 종류, 자이로, 밝기)을 Tiny RNN이 받아서  
@@ -13,24 +11,26 @@ TB6612FNG 모터 드라이버를 통해 실제 이동을 수행합니다.
 
 ```
 pi2/
- ├─ alarmConfig.json
- ├─ brain.py
- ├─ brain_es.py
- ├─ clock.py
- ├─ motorConfig.json
- ├─ move.py
- ├─ sensors.py
- ├─ tiny_rnn.py
- ├─ trainer.py
- ├─ logs/
- └─ README.md
+ ├─ control/
+ │   ├─ alarmConfig.json
+ │   ├─ clock.py
+ │   ├─ motorConfig.json
+ │   ├─ move.py
+ │   └─ sensors.py
+ ├─ rnn/
+ │   ├─ brain.py
+ │   ├─ brain_es.py
+ │   ├─ tiny_rnn.py
+ │   ├─ trainer.py
+ │   └─ README.md
+ └─ logs/
 ```
 
 ---
 
 ## 📄 파일 설명
 
-### **1. `tiny_rnn.py`**
+### **1. `rnn/tiny_rnn.py`**
 라즈베리파이에서 구동 가능한 초경량 Tiny RNN 모델 구현 파일입니다.
 - 입력: 센서 정보(거리, 물체종류, 자이로, 밝기)
 - 출력: 행동(action)
@@ -39,7 +39,7 @@ pi2/
 
 ---
 
-### **2. `brain.py`**
+### **2. `rnn/brain.py`**
 Tiny RNN을 감싸는 고수준 인터페이스.
 - RNN 초기화  
 - 가중치 가져오기 / 설정하기  
@@ -47,7 +47,7 @@ Tiny RNN을 감싸는 고수준 인터페이스.
 
 ---
 
-### **3. `brain_es.py**`
+### **3. `rnn/brain_es.py`**
 유전 알고리즘 기반 **Evolution Strategy (ES)** 구현.
 - population 생성
 - 각 개체별 노이즈 적용
@@ -56,7 +56,7 @@ Tiny RNN을 감싸는 고수준 인터페이스.
 
 ---
 
-### **4. `sensors.py`**
+### **4. `control/sensors.py`**
 로봇의 센서 입력을 소프트웨어적으로 관리.
 - 거리 센서 값 (mock)
 - 물체 타입 (고양이=무서움 등)
@@ -68,7 +68,7 @@ Tiny RNN을 감싸는 고수준 인터페이스.
 
 ---
 
-### **5. `move.py`**
+### **5. `control/move.py`**
 TB6612FNG 기반 좌/우 모터 제어.
 - `forward()`
 - `backward()`
@@ -80,7 +80,7 @@ TB6612FNG 기반 좌/우 모터 제어.
 
 ---
 
-### **6. `motorConfig.json`**
+### **6. `control/motorConfig.json`**
 모터 드라이버 핀 매핑을 저장하는 설정 파일입니다.
 - LEFT: IN1/IN2/PWM  
 - RIGHT: IN1/IN2/PWM  
@@ -88,7 +88,7 @@ TB6612FNG 기반 좌/우 모터 제어.
 
 ---
 
-### **7. `trainer.py`**
+### **7. `rnn/trainer.py`**
 AI 학습 엔진.
 - Tiny RNN + Evolution Strategy 조합
 - population 단위 평가
@@ -99,12 +99,12 @@ AI 학습 엔진.
 
 ---
 
-### **8. `alarmConfig.json`**
+### **8. `control/alarmConfig.json`**
 알람 기능(시계/알림)을 위한 JSON 저장소.
 
 ---
 
-### **9. `clock.py`**
+### **9. `control/clock.py`**
 현재 시간/날짜 계산 및 알람 로직.
 move, brain, trainer와 독립적으로 작동하는 서브 기능.
 
@@ -120,19 +120,19 @@ ES 학습 로그 자동 저장.
 ### **기본 학습 (10세대)**
 
 ```
-python3 trainer.py
+python3 rnn/trainer.py
 ```
 
 ### **50세대 학습**
 
 ```
-python3 trainer.py 50
+python3 rnn/trainer.py 50
 ```
 
 ### **모터 단독 테스트**
 
 ```
-python3 move.py
+python3 control/move.py
 ```
 
 ---
