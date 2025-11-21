@@ -2,9 +2,11 @@ import json
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 import requests
 
-ALARM_FILE = "alarmConfig.json"
+BASE_DIR = Path(__file__).resolve().parent
+ALARM_FILE = BASE_DIR / "alarmConfig.json"
 
 def get_weather_no_api(city="Seoul"):
     url = f"https://wttr.in/{city}?format=j1"
