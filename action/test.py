@@ -1,9 +1,9 @@
 # test_llm.py
-from llm_brain import LLMBrain
+from action.brain import Brain
 
 def run(sensor):
-    brain = LLMBrain()
-    left, right, emotion = brain.decide(sensor)
+    brain = Brain()
+    left, right, emotion = brain.act(sensor)
     print("input :", sensor)
     print("output:", left, right, emotion)
     print()
