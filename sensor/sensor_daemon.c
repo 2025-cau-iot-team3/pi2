@@ -15,7 +15,7 @@
 #include <json-c/json.h>
 
 #define MAX_SENSORS 8
-#define STATE_PATH "/home/ahn/i/pi2/sensor/sensor_state"
+#define STATE_PATH "./sensor_state"
 
 /* ======================= SENSOR STRUCT ======================= */
 
@@ -74,7 +74,7 @@ static int16_t read_word_new(int fd, uint8_t reg)
 
 static int load_config(int *bus, int *addr)
 {
-    FILE *fp = fopen("/home/ahn/i/pi2/cfg/sensorConfig.json", "r");
+    FILE *fp = fopen("../cfg/sensorConfig.json", "r");
     if (!fp) return -1;
 
     fseek(fp, 0, SEEK_END);
