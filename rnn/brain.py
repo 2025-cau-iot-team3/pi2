@@ -1,6 +1,8 @@
 # brain.py
+import json
+from pathlib import Path
 import numpy as np
-from tiny_rnn import TinyRNN
+from rnn.tiny_rnn import TinyRNN
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "cfg" / "objectConfig.json"
 EMO_CONFIG_PATH = Path(__file__).resolve().parent.parent / "cfg" / "emoConfig.json"
