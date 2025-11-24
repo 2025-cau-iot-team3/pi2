@@ -21,9 +21,9 @@ async def run(t):
     elif t == 2:
         msg = {
             "command": "yolo_detection",
-            "payload": {"label": "cat", "confidence": 0.92}
+            "payload": {"label": "knife", "confidence": 0.92}
         }
 
     await ws.send(json.dumps(msg))
 
-asyncio.run(run(1))
+asyncio.run(run(2))

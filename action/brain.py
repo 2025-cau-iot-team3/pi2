@@ -1,9 +1,22 @@
 # brain.py
 
-CLIFF_THRESHOLD_CM = 5.0
+CLIFF_THRESHOLD_CM = 100.0
 
-HAPPY_OBJECTS = {"person", "cat", "dog"}
-SCARY_OBJECTS = {"fork", "knife", "spoon"}
+import json
+import os
+
+# Load object preferences from config
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CFG_PATH = os.path.join(BASE_DIR, "cfg", "objectConfig.json")
+try:
+    with open(CFG_PATH, "r") as f:
+        _cfg = json.load(f)
+    HAPPY_OBJECTS = set(_cfg.get("like", []))
+    SCARY_OBJECTS = set(_cfg.get("dislike", []))
+except Exception as e:
+    print(f"[brain] objectConfig.json load failed: {e}")
+    HAPPY_OBJECTS = set()
+    SCARY_OBJECTS = set()
 
 class Brain:
     def __init__(self):
@@ -27,7 +40,7 @@ class Brain:
         front, back = self._get_front_back(distances)
 
         # 0) 앞뒤 모두 낭떠러지 근접 → 패닉
-        if front < CLIFF_THRESHOLD_CM and back < CLIFF_THRESHOLD_CM:
+        if front > CLIFF_THRESHOLD_CM and back > CLIFF_THRESHOLD_CM:
             return "panic"
 
         # 1) 자이로 값 중 하나라도 50 초과 → dizzy
@@ -72,7 +85,7 @@ class Brain:
 
         # 😱 무서움: 기본은 뒤로 가기, 단 뒤쪽 낭떠러지면 정지
         if emotion == "scary":
-            if back >= CLIFF_THRESHOLD_CM:
+            if back < CLIFF_THRESHOLD_CM:
                 left = -20.0
                 right = -20.0
             else:
@@ -80,7 +93,7 @@ class Brain:
 
         # 😄 행복: 기본은 앞으로 가기, 단 앞쪽 낭떠러지면 정지
         elif emotion == "happy":
-            if front >= CLIFF_THRESHOLD_CM:
+            if front < CLIFF_THRESHOLD_CM:
                 left = 20.0
                 right = 20.0
             else:

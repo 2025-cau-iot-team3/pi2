@@ -23,10 +23,10 @@ async def keep_thinking():
         "gyro": value["gyro"],
         "distances": value["distances"]
     }
-    left, right, emotion = brain.think(sensor= t)
-    if not manual_control: move.set_motor(left= left, right= right)
-    
-    print(left, right, emotion)
+    if not manual_control: 
+        left, right, emotion = brain.think(sensor= t)
+        move.set_motor(left= left, right= right)
+        print(left, right, emotion)
 
 async def handle_client(websocket):
     # First message must be register
