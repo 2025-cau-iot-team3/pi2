@@ -4,6 +4,8 @@ CLIFF_THRESHOLD_CM = 100.0
 
 import json
 import os
+import asyncio
+import time
 
 # Load object preferences from config
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -109,8 +111,104 @@ class Brain:
 
         return left, right, emotion
 
-def think(sensor):
-    brain = Brain()
-    left, right, emotion = brain.act(sensor)
-    # print("output:", left, right, emotion)
-    return left, right, emotion
+# ---------------------------------------------------------
+# Async Sensor Runner (Singleton)
+# ---------------------------------------------------------
+class BrainRunner:
+    _instance = None
+
+    @staticmethod
+    def get():
+        if BrainRunner._instance is None:
+            BrainRunner._instance = BrainRunner()
+        return BrainRunner._instance
+
+    def __init__(self):
+        if BrainRunner._instance is not None:
+            return
+        self.brain = Brain()
+
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.sensor_path = os.path.join(base, "sensor", "sensor_state")
+        self.yolo_path = os.path.join(base, "sensor", "yolo_obj")
+
+        self.current_label = None
+        self.last_label_time = 0
+
+    def _read_sensor_state(self):
+        try:
+            with open(self.sensor_path, "r") as f:
+                data = json.load(f)
+            distances = [data.get("ultrasonic_1", -1.0), data.get("ultrasonic_2", -1.0)]
+            gyro = tuple(data.get("gyro", (0.0, 0.0, 0.0)))
+            return distances, gyro
+        except:
+            return [9999.0, 9999.0], (0.0, 0.0, 0.0)
+
+    def _read_yolo_obj(self):
+        """
+        yolo_obj 파일에 여러 줄이 있을 경우 모두 읽어서 리스트로 반환.
+        가장 최근 레이블은 self.current_label 로 관리.
+        """
+        try:
+            with open(self.yolo_path, "r") as f:
+                lines = [ln.strip() for ln in f.read().splitlines() if ln.strip()]
+        except:
+            return []
+
+        # Empty file
+        if not lines:
+            return []
+
+        # 갱신된 YOLO 결과는 맨 위 첫 줄이라고 가정
+        self.current_label = lines[0]
+        self.last_label_time = time.time()
+
+        # 3초 decay 적용 — 기간 지나면 전체 리셋
+        if time.time() - self.last_label_time > 3.0:
+            return []
+
+        return lines
+
+    async def loop(self, interval=0.2):
+        while True:
+            distances, gyro = self._read_sensor_state()
+            objs = self._read_yolo_obj()
+
+            sensor = {
+                "object": objs[0] if objs else None,
+                "gyro": gyro,
+                "distances": distances
+            }
+
+            left, right, emotion = self.brain.act(sensor)
+            print("[BrainRunner]", sensor, "=>", left, right, emotion)
+
+            await asyncio.sleep(interval)
+
+# ---------------------------------------------------------
+# Debug: read files once and print values
+# ---------------------------------------------------------
+if __name__ == "__main__":
+    runner = BrainRunner.get()
+
+    # read sensor_state
+    try:
+        with open(runner.sensor_path, "r") as f:
+            data = json.load(f)
+        distances = [
+            data.get("ultrasonic_1", -1.0),
+            data.get("ultrasonic_2", -1.0)
+        ]
+        gyro = tuple(data.get("gyro", (0.0, 0.0, 0.0)))
+        print("[DEBUG] sensor_state =", distances, gyro)
+    except Exception as e:
+        print(f"[DEBUG] sensor_state read error: {e}")
+
+    # read yolo_obj (print all lines)
+    try:
+        with open(runner.yolo_path, "r") as f:
+            lines = [ln.strip() for ln in f.read().splitlines() if ln.strip()]
+        print("[DEBUG] yolo_obj lines =", lines)
+    except Exception as e:
+        print(f"[DEBUG] yolo_obj read error: {e}")
