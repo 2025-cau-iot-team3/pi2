@@ -1,5 +1,5 @@
 # test_llm.py
-from action.brain import Brain
+from brain import Brain
 
 def run(sensor):
     brain = Brain()
