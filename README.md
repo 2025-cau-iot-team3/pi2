@@ -11,6 +11,7 @@ TB6612FNG 모터 드라이버를 통해 실제 이동을 수행합니다.
 
 ```
 pi2/
+<<<<<<< Updated upstream
  ├─ logs/*
  ├─ control/
  │   ├─ alarmConfig.json
@@ -24,6 +25,35 @@ pi2/
  │   ├─ tiny_rnn.py
  │   └─ trainer.py
  └─ README.md
+=======
+ ├─ logs/
+ ├─ motor/
+ │   ├─ move              # 좌/우 속도 명령을 motor_cmd에 기록하는 바이너리
+ │   ├─ move_daemon       # pigpio 기반 모터 제어 데몬
+ │   ├─ motorInit.py      # 데몬/서비스 초기화 스크립트
+ │   ├─ move.c
+ │   └─ move_daemon.c
+ ├─ sensor/
+ │   ├─ gyro.c            # MPU6050를 C로 읽어 gyro_state에 기록
+ │   ├─ ultrasonic.c      # 초음파를 C로 읽어 ultra_state에 기록
+ │   ├─ sensor_daemon.c   # 자이로+초음파를 통합 폴링해 sensor_state에 기록
+ │   ├─ ultrasonic.py     # 초음파 센서 읽기
+ │   ├─ gyro.py           # MPU6050 자이로/가속도
+ │   ├─ sensor_daemon.py  # 센서 값 캐싱 데몬
+ │   └─ test.py           # 간단한 센서 테스트
+ ├─ util/
+ │   └─ clock.py
+ ├─ cfg/
+ │   ├─ objectConfig.json  # object 문자열을 -100~100 선호도로 매핑
+ │   ├─ motorConfig.json   # TB6612FNG 핀 매핑
+ │   ├─ sensorConfig.json  # 초음파 핀/주소 설정
+ │   └─ alarmConfig.json   # 알람 설정
+ └─ rnn/
+     ├─ brain.py
+     ├─ brain_es.py
+     ├─ tiny_rnn.py
+     └─ trainer.py
+>>>>>>> Stashed changes
 ```
 
 ---
@@ -52,6 +82,10 @@ Tiny RNN을 감싸는 고수준 인터페이스.
 - RNN 초기화  
 - 가중치 가져오기 / 설정하기  
 - 상태 입력 → 행동 출력(`act()`)
+<<<<<<< Updated upstream
+=======
+- `cfg/objectConfig.json`의 선호도(-100~100)를 읽어 object 입력을 -1~1로 정규화
+>>>>>>> Stashed changes
 
 #### 사용법
 ```python
