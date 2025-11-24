@@ -3,7 +3,21 @@ import asyncio
 import websockets
 import json
 
-import motor
+from motor import move, motorInit
+from sensor import sensor
+from action import brain
+
+manual_control = False
+
+async def keep_thinking():
+    
+    value = sensor.read()
+    t = {"object": "dog", "gyro": value["gyro"], "distances": value["distances"]}
+    left, right, emotion = brain.think(sensor= t)
+    
+    if not manual_control: move.set_motor(left= left, right= right)
+    
+    print(left, right, emotion)
 
 async def handle_client(websocket):
     print("새 클라이언트 연결!")
@@ -18,15 +32,23 @@ async def handle_client(websocket):
 
             # === motor_control ===
             if cmd == "motor_control":
+                manual_control = True
                 left = payload.get("left", 0)
                 right = payload.get("right", 0)
-                print(f"[모터 제어] L={left}, R={right}")
+                print(f"[컨트롤] L: {left}, R: {right}")
                 # TODO: 실제 모터 동작 연결
-                motor.move.set_motor(left= left, right= right)
+                move.set_motor(left= left, right= right)
+            
+            elif cmd == "stop_control":
+                move.set_motor(left= 0, right= 0)
+                manual_control = False
+                print(f"[컨트롤] 수동 컨트롤 종료. 이제 자유롭게 움직입니다.")
 
             # === yolo_detection ===
             elif cmd == "yolo_detection":
-                print(f"[YOLO] 객체 감지됨: {payload}")
+                obj = payload.get("label", 0)
+                conf = payload.get("confidence", 0)
+                print(f"[YOLO] 객체: {obj}, 신뢰도: {conf}")
                 # TODO: LCD 표시 / 소리 등
 
             # === sensor_request (optional) ===
@@ -45,7 +67,15 @@ async def main():
     print("Pi2 서버 시작: ws://0.0.0.0:8000")
     async with websockets.serve(handle_client, "0.0.0.0", 8000):
         await asyncio.Future()
+        
+async def quit():
+    motorInit.kill_process("move_daemon")
+    motorInit.kill_process("pigpiod")
+    print("서버 종료 완료.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
-    motor.motorInit()
+    try:
+        motorInit.init()
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        asyncio.run(quit())

@@ -1,13 +1,6 @@
 # test_llm.py
 from brain import Brain
 
-def run(sensor):
-    brain = Brain()
-    left, right, emotion = brain.act(sensor)
-    print("input :", sensor)
-    print("output:", left, right, emotion)
-    print()
-
 if __name__ == "__main__":
     tests = [
         {"object": "dog", "gyro": (10, 10, 20), "distances": [120, 150]},
@@ -18,4 +11,4 @@ if __name__ == "__main__":
     ]
 
     for t in tests:
-        run(t)
+        Brain.think(t)

@@ -95,3 +95,9 @@ class Brain:
         right = max(-100.0, min(100.0, right))
 
         return left, right, emotion
+
+def think(sensor):
+    brain = Brain()
+    left, right, emotion = brain.act(sensor)
+    # print("output:", left, right, emotion)
+    return left, right, emotion
