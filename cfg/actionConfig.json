@@ -1,0 +1,11 @@
+{
+    "emotions": ["happy", "sad", "angry", "scared", "dizzy", "sleepy"],
+    "actions": {
+        "happy": [],
+        "sad": [],
+        "angry": [],
+        "scared": [],
+        "dizzy": [],
+        "sleep": []
+    }
+}
