@@ -7,19 +7,34 @@ from motor import move, motorInit
 from sensor import sensor
 from action import brain
 
+global manual_control
 manual_control = False
+current_yolo_label = None
+current_yolo_conf = 0.0
+clients = {}
 
 async def keep_thinking():
     
     value = sensor.read()
-    t = {"object": "dog", "gyro": value["gyro"], "distances": value["distances"]}
+    global current_yolo_label, current_yolo_conf
+    t = {
+        "object": current_yolo_label,
+        "confidence": current_yolo_conf,
+        "gyro": value["gyro"],
+        "distances": value["distances"]
+    }
     left, right, emotion = brain.think(sensor= t)
-    
     if not manual_control: move.set_motor(left= left, right= right)
     
     print(left, right, emotion)
 
 async def handle_client(websocket):
+    # First message must be register
+    register_msg = json.loads(await websocket.recv())
+    cid = register_msg.get("payload", {}).get("id", "unknown")
+    clients[cid] = websocket
+    print(f"[등록됨] id={cid}")
+
     print("새 클라이언트 연결!")
 
     try:
@@ -32,6 +47,7 @@ async def handle_client(websocket):
 
             # === motor_control ===
             if cmd == "motor_control":
+                global manual_control
                 manual_control = True
                 left = payload.get("left", 0)
                 right = payload.get("right", 0)
@@ -41,6 +57,7 @@ async def handle_client(websocket):
             
             elif cmd == "stop_control":
                 move.set_motor(left= 0, right= 0)
+                global manual_control
                 manual_control = False
                 print(f"[컨트롤] 수동 컨트롤 종료. 이제 자유롭게 움직입니다.")
 
@@ -48,7 +65,10 @@ async def handle_client(websocket):
             elif cmd == "yolo_detection":
                 obj = payload.get("label", 0)
                 conf = payload.get("confidence", 0)
-                print(f"[YOLO] 객체: {obj}, 신뢰도: {conf}")
+                print(f"[YOLO] from {cid} 객체: {obj}, 신뢰도: {conf}")
+                global current_yolo_label, current_yolo_conf
+                current_yolo_label = obj
+                current_yolo_conf = conf
                 # TODO: LCD 표시 / 소리 등
 
             # === sensor_request (optional) ===
@@ -65,8 +85,18 @@ async def handle_client(websocket):
 
 async def main():
     print("Pi2 서버 시작: ws://0.0.0.0:8000")
-    async with websockets.serve(handle_client, "0.0.0.0", 8000):
-        await asyncio.Future()
+    
+    async def thinking_loop():
+        while True:
+            await keep_thinking()
+            await asyncio.sleep(1)
+
+    server = websockets.serve(handle_client, "0.0.0.0", 8000)
+
+    await asyncio.gather(
+        server,
+        thinking_loop()
+    )
         
 async def quit():
     motorInit.kill_process("move_daemon")
