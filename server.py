@@ -1,53 +1,51 @@
-# ws_server.py
+# server.py  (Pi2 하드웨어 서버)
 import asyncio
 import websockets
 import json
 
-# 접속한 장치들 저장
-connected_clients = {}
+import motor
 
-async def handle_client(websocket, path):
-    print("새 연결 감지!")
+async def handle_client(websocket):
+    print("새 클라이언트 연결!")
 
     try:
-        async for message in websocket:
-            data = json.loads(message)
+        async for msg in websocket:
+            data = json.loads(msg)
             cmd = data.get("command")
-            payload = data.get("payload")
+            payload = data.get("payload", {})
 
-            # 1. 장치 등록(register)
-            if cmd == "register":
-                role = payload.get("role", "unknown")
-                connected_clients[role] = websocket
-                print(f"[등록 완료] role={role}")
+            print(f"[수신] cmd={cmd}, payload={payload}")
 
-            # 2. Pi 3 → Pi 2 모터 제어 전달
-            elif cmd == "motor_control":
-                if "pi2_hardware" in connected_clients:
-                    await connected_clients["pi2_hardware"].send(json.dumps(data))
-                    print("[전달 완료] motor_control → pi2_hardware")
+            # === motor_control ===
+            if cmd == "motor_control":
+                left = payload.get("left", 0)
+                right = payload.get("right", 0)
+                print(f"[모터 제어] L={left}, R={right}")
+                # TODO: 실제 모터 동작 연결
+                motor.move.set_motor(left= left, right= right)
 
-            # 3. Pi 2 → Pi 3 YOLO 감지 전달
+            # === yolo_detection ===
             elif cmd == "yolo_detection":
-                if "pi3_brain" in connected_clients:
-                    await connected_clients["pi3_brain"].send(json.dumps(data))
-                    print("[전달 완료] yolo_detection → pi3_brain")
+                print(f"[YOLO] 객체 감지됨: {payload}")
+                # TODO: LCD 표시 / 소리 등
+
+            # === sensor_request (optional) ===
+            elif cmd == "sensor_request":
+                # Pi2가 sensor 값을 서버로 전송하고 싶을 때 사용
+                pass
 
     except Exception as e:
-        print(f"클라이언트 처리 에러: {e}")
+        print("에러:", e)
 
     finally:
-        # 연결 종료 시 connected_clients에서 제거
-        to_remove = [k for k,v in connected_clients.items() if v == websocket]
-        for key in to_remove:
-            del connected_clients[key]
         print("클라이언트 연결 종료")
 
 
 async def main():
-    print("웹소켓 서버 시작 ws://0.0.0.0:8000")
+    print("Pi2 서버 시작: ws://0.0.0.0:8000")
     async with websockets.serve(handle_client, "0.0.0.0", 8000):
-        await asyncio.Future()  # run forever
+        await asyncio.Future()
 
 if __name__ == "__main__":
     asyncio.run(main())
+    motor.motorInit()
