@@ -2,7 +2,7 @@
 import numpy as np
 
 class TinyRNN:
-    def __init__(self, input_size, hidden_size=8, output_size=4):
+    def __init__(self, input_size, hidden_size=8, output_size=2):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size

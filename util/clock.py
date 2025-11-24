@@ -5,8 +5,8 @@ from datetime import datetime
 from pathlib import Path
 import requests
 
-BASE_DIR = Path(__file__).resolve().parent
-ALARM_FILE = BASE_DIR / "alarmConfig.json"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ALARM_FILE = PROJECT_ROOT / "cfg" / "alarmConfig.json"
 
 def get_weather_no_api(city="Seoul"):
     url = f"https://wttr.in/{city}?format=j1"
@@ -38,7 +38,7 @@ def current_date_md():
 # ----------------------------
 
 def load_alarms():
-    if not os.path.exists(ALARM_FILE):
+    if not ALARM_FILE.exists():
         return []
     with open(ALARM_FILE, "r") as f:
         return json.load(f)

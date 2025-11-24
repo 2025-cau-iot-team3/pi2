@@ -1,0 +1,12 @@
+{
+  "like": {
+    "toy": 1,
+    "friend": 1,
+    "cat": 1
+  },
+  "dislike": {
+    "human": 1,
+    "dog": 1,
+    "obstacle": 1
+  }
+}
