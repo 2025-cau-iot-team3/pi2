@@ -2,7 +2,12 @@
   "mpu6050": {
     "bus": 1,
     "address": 104,
-    "type": "imu"
+    "type": "imu",
+    "neutral": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    }
   },
 
   "ultrasonic_1": {

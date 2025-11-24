@@ -1,4 +1,5 @@
 .DS_*
+*.npz
 
 logs/*
 __pycache__/*

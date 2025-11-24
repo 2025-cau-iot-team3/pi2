@@ -1,77 +1,84 @@
+# llm_brain.py
 import json
-from pathlib import Path
-import math
+import requests
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "cfg" / "objectConfig.json"
+LLM_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
+LLM_MODEL = "tiny-robot-llm"
 
+SYSTEM_PROMPT = (
+    "너는 소형 로봇의 감정 및 모터 제어를 담당하는 컨트롤러다. "
+    "주어지는 센서 입력(object, gyro, distances)에 대해 아래 규칙을 반드시 지켜서 "
+    'JSON 형식 {"emotion": ..., "left": ..., "right": ...} 만 반환하라.\n\n'
+    "규칙:\n"
+    "1) gyro 값 셋 중 하나라도 50을 초과하면 emotion=\"dizzy\" 이고 left=0, right=0 이다.\n"
+    "2) distances[1] (두 번째 거리 값)이 200 이상이면 emotion=\"scary\" 이고 left=-20, right=-20 이다.\n"
+    "3) object 가 fork, knife, spoon 중 하나이면 emotion=\"scary\" 이고 left=-20, right=-20 이다.\n"
+    "4) object 가 person, cat, dog 중 하나이면 emotion=\"happy\" 이고 left=10, right=10 이다.\n"
+    "5) 위에 해당하지 않으면 emotion=\"neutral\" 이고 left=0, right=0 이다.\n"
+    "항상 위 규칙을 우선하며 임의로 규칙을 바꾸지 마라."
+)
 
-def _load_preferences():
-    prefs = {}
-    if not CONFIG_PATH.exists():
-        return prefs
-    try:
-        with open(CONFIG_PATH, "r") as f:
-            data = json.load(f)
-        if isinstance(data, dict) and "preference" in data and isinstance(data["preference"], dict):
-            data = data["preference"]
-        if isinstance(data, dict):
-            for k, v in data.items():
-                try:
-                    prefs[str(k)] = float(v)
-                except Exception:
-                    continue
-    except Exception:
-        return {}
-    return prefs
+class LLMBrain:
+    def __init__(self, endpoint: str = LLM_ENDPOINT, model: str = LLM_MODEL):
+        self.endpoint = endpoint
+        self.model = model
 
-
-PREFERENCES = _load_preferences()
-
-
-class Brain:
-    """
-    규칙 기반 + 선호도 기반의 단순 로직.
-    - 입력: sensor dict {object, gyro(3), distances(2)}
-    - 출력: (left, right, emotion)
-    """
-
-    def __init__(self):
-        self.preferences = PREFERENCES
-
-    def act(self, sensor):
-        sensor = sensor or {}
+    def _build_messages(self, sensor: dict):
+        obj = sensor.get("object")
         gyro = sensor.get("gyro") or (0.0, 0.0, 0.0)
         distances = sensor.get("distances") or [0.0, 0.0]
-        if len(distances) == 0:
-            distances = [0.0, 0.0]
-        elif len(distances) == 1:
-            distances = [distances[0], distances[0]]
-        obj = sensor.get("object")
 
-        # ============================
-        # 1) 감정 판단 하드코딩 규칙
-        # ============================
+        user_text = (
+            "다음은 현재 센서 상태이다.\n"
+            f"object: {obj}\n"
+            f"gyro: {list(gyro)}\n"
+            f"distances: {list(distances)}\n\n"
+            '위 규칙에 따라 emotion, left, right 를 결정하고, '
+            '반드시 JSON 하나만 반환하라. 예: {"emotion":"happy","left":10,"right":10}'
+        )
 
-        # 자이로 값 중 하나라도 50 초과 → dizzy
-        g_max = max(abs(g) for g in gyro)
-        if g_max > 50:
-            return 0.0, 0.0, "dizzy"
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_text},
+        ]
 
-        # 거리 두 번째 값이 200 이상이면 → scary
-        d2 = distances[1]
-        if d2 >= 200:
-            return -20.0, -20.0, "scary"
+    def decide(self, sensor: dict):
+        msgs = self._build_messages(sensor)
+        try:
+            res = requests.post(
+                self.endpoint,
+                headers={"Content-Type": "application/json"},
+                data=json.dumps(
+                    {
+                        "model": self.model,
+                        "messages": msgs,
+                        "temperature": 0.0,
+                        "max_tokens": 64,
+                    }
+                ),
+                timeout=5,
+            )
+        except Exception:
+            return 0.0, 0.0, "neutral"
 
-        # 위험 물체는 → scary
-        bad_objs = {"fork", "knife", "spoon"}
-        if obj in bad_objs:
-            return -20.0, -20.0, "scary"
+        if res.status_code != 200:
+            return 0.0, 0.0, "neutral"
 
-        # 좋아하는 물체는 → happy
-        good_objs = {"person", "cat", "dog"}
-        if obj in good_objs:
-            return 10.0, 10.0, "happy"
-
-        # 나머지는 → neutral
-        # (모터 정지)
-        return 0.0, 0.0, "neutral"
+        try:
+            data = res.json()
+            content = data["choices"][0]["message"]["content"]
+            obj = json.loads(content)
+            emotion = str(obj.get("emotion", "neutral"))
+            left = float(obj.get("left", 0.0))
+            right = float(obj.get("right", 0.0))
+            if left < -100:
+                left = -100.0
+            if left > 100:
+                left = 100.0
+            if right < -100:
+                right = -100.0
+            if right > 100:
+                right = 100.0
+            return left, right, emotion
+        except Exception:
+            return 0.0, 0.0, "neutral"

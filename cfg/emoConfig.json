@@ -3,6 +3,9 @@
     "neutral",
     "happy",
     "sad",
-    "angry"
+    "angry",
+    "scary",
+    "dizzy",
+    "sleep"
   ]
 }
