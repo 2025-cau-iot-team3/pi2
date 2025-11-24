@@ -56,10 +56,9 @@ async def handle_client(websocket):
                 move.set_motor(left= left, right= right)
             
             elif cmd == "stop_control":
-                move.set_motor(left= 0, right= 0)
-                global manual_control
+                move.set_motor(left=0, right=0)
                 manual_control = False
-                print(f"[컨트롤] 수동 컨트롤 종료. 이제 자유롭게 움직입니다.")
+                print("[컨트롤] 수동 컨트롤 종료. 이제 자유롭게 움직입니다.")
 
             # === yolo_detection ===
             elif cmd == "yolo_detection":
