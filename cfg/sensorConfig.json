@@ -1,0 +1,21 @@
+{
+  "mpu6050": {
+    "bus": 1,
+    "address": 104,
+    "type": "imu"
+  },
+
+  "ultrasonic_1": {
+    "type": "distance",
+    "trigger_pin": 23,
+    "echo_pin": 24,
+    "timeout": 30000
+  },
+
+  "ultrasonic_2": {
+    "type": "distance",
+    "trigger_pin": 27,
+    "echo_pin": 22,
+    "timeout": 30000
+  }
+}

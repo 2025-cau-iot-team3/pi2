@@ -13,9 +13,9 @@ int speedToDuty(int s) {
 
 int main() {
     // ------------------ motorConfig.json 읽기 ------------------
-    FILE *fp = fopen("motorConfig.json", "r");
+    FILE *fp = fopen("../cfg/motorConfig.json", "r");
     if (!fp) {
-        printf("ERROR: motorConfig.json not found\n");
+        printf("ERROR: cfg/motorConfig.json not found\n");
         return 1;
     }
 
