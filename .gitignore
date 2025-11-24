@@ -3,6 +3,7 @@
 
 logs/*
 __pycache__/*
+*/__pycache__/*
 
 motor_cmd
 sensor_state
