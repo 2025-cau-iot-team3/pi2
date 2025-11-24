@@ -1,25 +1,17 @@
 # trainer.py
+import json
 import os
 import time
 import sys
+import subprocess
 from datetime import datetime
-<<<<<<< Updated upstream
-=======
 from pathlib import Path
-import numpy as np
->>>>>>> Stashed changes
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-<<<<<<< Updated upstream
-from brain import Brain
-from brain_es import EvolutionStrategy
-from control.sensors import read_sensors, compute_reward
-from control.move import forward, backward, left, right, stop
-=======
 from rnn.brain import Brain
 from rnn.brain_es import EvolutionStrategy
 
@@ -84,16 +76,6 @@ def _read_state_file(path, max_age=1.0):
 def read_sensors():
     merged = _read_state_file(SENSOR_STATE, max_age=1.0)
     if merged:
-        # 보조 필드 정규화
-        distances = []
-        dist_map = merged.get("distances") or {}
-        if isinstance(dist_map, dict):
-            for k in sorted(dist_map.keys()):
-                v = dist_map[k]
-                distances.append(0.0 if v is None else float(v))
-        while len(distances) < 2:
-            distances.append(0.0)
-        merged["distances"] = distances[:2]
         return merged
 
     gyro_state = _read_state_file(GYRO_STATE, max_age=1.0)
@@ -104,25 +86,15 @@ def read_sensors():
             "object": 0,
             "gyro": (0.0, 0.0, 0.0),
             "brightness": 0.0,
-            "distances": [0.0, 0.0],
             "ts": max(
                 (gyro_state or {}).get("ts", 0),
                 (ultra_state or {}).get("ts", 0),
             ),
         }
         if ultra_state and "distances" in ultra_state:
-            dist_map = ultra_state["distances"] or {}
-            vals = []
-            if isinstance(dist_map, dict):
-                for k in sorted(dist_map.keys()):
-                    v = dist_map[k]
-                    vals.append(0.0 if v is None else float(v))
-            while len(vals) < 2:
-                vals.append(0.0)
-            data["distances"] = vals[:2]
-            valid = [v for v in vals if v > 0]
-            if valid:
-                data["dist"] = min(valid)
+            vals = [v for v in ultra_state["distances"].values() if v is not None]
+            if vals:
+                data["dist"] = min(vals)
         if gyro_state and "gyro" in gyro_state:
             g = gyro_state["gyro"]
             if isinstance(g, (list, tuple)) and len(g) == 3:
@@ -134,19 +106,11 @@ def read_sensors():
         "object": 0,  # 현재 물체 분류 센서 없음 → 기본값
         "gyro": (0.0, 0.0, 0.0),
         "brightness": 0.0,  # 밝기 센서 없음 → 기본값
-        "distances": [0.0, 0.0],
     }
     try:
         from sensor.ultrasonic import read_all as read_ultrasonic
         distances = read_ultrasonic()
-        ordered = []
-        for k in sorted(distances.keys()):
-            v = distances[k]
-            ordered.append(0.0 if v is None else float(v))
-        while len(ordered) < 2:
-            ordered.append(0.0)
-        data["distances"] = ordered[:2]
-        valid = [d for d in ordered if d > 0]
+        valid = [d for d in distances.values() if d is not None]
         if valid:
             data["dist"] = min(valid)
     except Exception as e:
@@ -168,7 +132,6 @@ def compute_reward(sensor_data):
     target = 50.0  # 목표 거리(cm) 근처로 유지하도록 보상
     reward = 1.0 - abs(dist - target) / max(target, 1.0)
     return max(-1.0, min(1.0, reward))
->>>>>>> Stashed changes
 
 
 # ---------------------------
@@ -188,15 +151,11 @@ print(f"[INFO] Training for {TARGET_GENERATIONS} generations.")
 # ---------------------------
 # 로그 디렉토리 + 파일명 날짜 포함
 # ---------------------------
-LOG_DIR = "logs"
-if not os.path.exists(LOG_DIR):
-    os.makedirs(LOG_DIR)
+LOG_DIR = PROJECT_ROOT / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-LOG_FILE = f"{LOG_DIR}/es_train_{timestamp}.log"
-
-MODELS_DIR = PROJECT_ROOT / "models"
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / f"es_train_{timestamp}.log"
 
 def log(message):
     t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -230,105 +189,24 @@ def study(target_generations=10, population=5):
             new_weights = [w + n * es.sigma for w, n in zip(weights, noise)]
             brain.set_weights(new_weights)
 
-            s = read_sensors()
-            left_speed, right_speed, emotion = brain.act(s)
-
-            # 행동 실행 (좌/우 속도 직접 전송)
-            _send_motor(left_speed, right_speed)
-
-            time.sleep(0.15)
-
-            r = compute_reward(s)
-            rewards.append(r)
-
-            # 상세 출력
-            print(f"  Sensor: {s}")
-            print(f"  Speed : L={left_speed:.1f}, R={right_speed:.1f}")
-            if emotion is not None:
-                print(f"  Emotion: {emotion}")
-            print(f"  Reward: {r:.3f}")
-
-            # 로그 저장
-            log(f"Gen{generation} | Ind{idx+1} | Sensor={s} | Speed=({left_speed:.1f},{right_speed:.1f}) | Emotion={emotion} | Reward={r:.3f}")
-
-        stop()
-        time.sleep(0.1)
-
-        weights = es.update(noises, rewards)
-        brain.set_weights(weights)
-
-        avg_r = sum(rewards) / len(rewards)
-        print(f"\n[Generation {generation}] Average Reward: {avg_r:.3f}")
-        log(f"Generation {generation} Average Reward: {avg_r:.3f}")
-
-        model_path = save_weights(weights, generation)
-        log(f"[MODEL] Saved generation {generation} to {model_path.name}")
-        print(f"[MODEL] Saved: {model_path}")
-
-    print("\n🎉 Training complete!")
-    print(f"Log saved: {LOG_FILE}")
-    return weights
-
-
-_infer_brain = None
-_infer_weights = None
-
-def load_inference(weights):
-    """베스트 가중치로 경량 추론용 Brain 준비."""
-    global _infer_brain, _infer_weights
-    if _infer_brain is None:
-        _infer_brain = Brain()
-    _infer_weights = weights
-    _infer_brain.set_weights(weights)
-
-def infer(sensor_data):
-    """학습된 베스트 가중치로 실시간 판단."""
-    if _infer_brain is None or _infer_weights is None:
-        raise RuntimeError("Inference brain not loaded. Call load_inference(weights) first.")
-    return _infer_brain.act(sensor_data)
-
-
-def save_weights(weights, generation):
-    """모델 가중치를 models/model_gen_XXXX.npz로 저장."""
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    filename = MODELS_DIR / f"model_gen_{generation:04d}.npz"
-    np.savez(filename, *weights)
-    return filename
-
-<<<<<<< Updated upstream
         s = read_sensors()
-        action = brain.act(s)
+        left_speed, right_speed = brain.act(s)
 
-        # 행동 실행
-        if action == "RUN_AWAY":
-            backward(speed=60)
-        elif action == "APPROACH":
-            forward(speed=50)
-        elif action == "TURN_LEFT":
-            left(speed=40)
-        elif action == "TURN_RIGHT":
-            right(speed=40)
-=======
+        # 행동 실행 (좌/우 속도 직접 전송)
+        _send_motor(left_speed, right_speed)
 
-def load_weights_from_file(path):
-    """저장된 npz에서 가중치 리스트를 복원."""
-    with np.load(path, allow_pickle=False) as data:
-        arrays = [data[key] for key in data.files]
-    return arrays
->>>>>>> Stashed changes
+        time.sleep(0.15)
 
-
-<<<<<<< Updated upstream
         r = compute_reward(s)
         rewards.append(r)
 
         # 상세 출력
         print(f"  Sensor: {s}")
-        print(f"  Action: {action}")
+        print(f"  Speed : L={left_speed:.1f}, R={right_speed:.1f}")
         print(f"  Reward: {r:.3f}")
 
         # 로그 저장
-        log(f"Gen{generation} | Ind{idx+1} | Sensor={s} | Action={action} | Reward={r:.3f}")
+        log(f"Gen{generation} | Ind{idx+1} | Sensor={s} | Speed=({left_speed:.1f},{right_speed:.1f}) | Reward={r:.3f}")
 
     stop()
     time.sleep(0.1)
