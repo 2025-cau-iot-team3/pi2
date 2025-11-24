@@ -15,7 +15,9 @@
 #include <json-c/json.h>
 
 #define MAX_SENSORS 8
-#define STATE_PATH "../sensor/sensor_state"
+#define STATE_PATH "/home/ahn/i/pi2/sensor/sensor_state"
+
+/* ======================= SENSOR STRUCT ======================= */
 
 typedef struct {
     char name[32];
@@ -27,7 +29,7 @@ typedef struct {
 static sensor_t sensors[MAX_SENSORS];
 static int sensor_count = 0;
 
-/* ======================= I2C SMBUS REPLACEMENTS ======================= */
+/* ======================= SMBUS REPLACEMENTS ======================= */
 
 static int read_byte_data(int fd, uint8_t reg)
 {
@@ -72,7 +74,7 @@ static int16_t read_word_new(int fd, uint8_t reg)
 
 static int load_config(int *bus, int *addr)
 {
-    FILE *fp = fopen("../cfg/sensorConfig.json", "r");
+    FILE *fp = fopen("/home/ahn/i/pi2/cfg/sensorConfig.json", "r");
     if (!fp) return -1;
 
     fseek(fp, 0, SEEK_END);
@@ -194,42 +196,38 @@ static double measure_ultra(int trig, int echo, int timeout_us)
 
 /* ============================ JSON ============================== */
 
-static void write_state(const char *path, double *dist, double ax, double ay, double az,
+static void write_state(const char *path, double *dist,
+                        double ax, double ay, double az,
                         double gx, double gy, double gz)
 {
     struct json_object *root = json_object_new_object();
-    struct json_object *dist_obj = json_object_new_object();
 
-    double min_d = 0.0;
     for (int i = 0; i < sensor_count; i++) {
-        json_object_object_add(dist_obj, sensors[i].name,
+        json_object_object_add(root,
+                               sensors[i].name,
                                json_object_new_double(dist[i]));
-
-        if (dist[i] > 0) {
-            if (min_d == 0 || dist[i] < min_d) min_d = dist[i];
-        }
     }
 
     struct json_object *gyro = json_object_new_array();
     json_object_array_add(gyro, json_object_new_double(gx));
     json_object_array_add(gyro, json_object_new_double(gy));
     json_object_array_add(gyro, json_object_new_double(gz));
-
-    json_object_object_add(root, "dist", json_object_new_double(min_d));
-    json_object_object_add(root, "distances", dist_obj);
     json_object_object_add(root, "gyro", gyro);
-    json_object_object_add(root, "brightness", json_object_new_double(0.0));
-    json_object_object_add(root, "ts", json_object_new_int64((int64_t)time(NULL)));
+
+    json_object_object_add(root, "ts",
+                           json_object_new_int64((int64_t)time(NULL)));
 
     char tmp[256];
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
 
     FILE *fp = fopen(tmp, "w");
     if (fp) {
-        fputs(json_object_to_json_string_ext(root, JSON_C_TO_STRING_PLAIN), fp);
+        fputs(json_object_to_json_string_ext(root,
+              JSON_C_TO_STRING_PLAIN), fp);
         fclose(fp);
         rename(tmp, path);
     }
+
     json_object_put(root);
 }
 
@@ -270,18 +268,24 @@ int main(int argc, char **argv)
     }
     double interval = 1.0 / hz;
 
-    printf("[sensor_daemon] gyro bus=%d addr=0x%02X, ultra=%d -> %s (%.1f Hz)\n",
-           bus, addr, sensor_count, STATE_PATH, hz + 0.0);
+    printf("[sensor_daemon] gyro bus=%d addr=0x%02X, ultra=%d -> %s (%d Hz)\n",
+           bus, addr, sensor_count, STATE_PATH, hz);
 
     double dist[MAX_SENSORS];
     double ax, ay, az, gx, gy, gz;
 
     while (1) {
         read_gyro_vals(fd, &ax, &ay, &az, &gx, &gy, &gz);
-        for (int i = 0; i < sensor_count; i++)
-            dist[i] = measure_ultra(sensors[i].trig, sensors[i].echo, sensors[i].timeout_us);
 
-        write_state(STATE_PATH, dist, ax, ay, az, gx, gy, gz);
+        for (int i = 0; i < sensor_count; i++)
+            dist[i] = measure_ultra(sensors[i].trig,
+                                    sensors[i].echo,
+                                    sensors[i].timeout_us);
+
+        write_state(STATE_PATH, dist,
+                     ax, ay, az,
+                     gx, gy, gz);
+
         usleep((useconds_t)(interval * 1e6));
     }
 
