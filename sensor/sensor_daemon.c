@@ -28,6 +28,9 @@ typedef struct {
 
 static sensor_t sensors[MAX_SENSORS];
 static int sensor_count = 0;
+static double gyro_neutral_x = 0.0;
+static double gyro_neutral_y = 0.0;
+static double gyro_neutral_z = 0.0;
 
 /* ======================= SMBUS REPLACEMENTS ======================= */
 
@@ -97,6 +100,16 @@ static int load_config(int *bus, int *addr)
         json_object_object_get_ex(mpu, "address", &addr_v);
         *bus = json_object_get_int(bus_v);
         *addr = json_object_get_int(addr_v);
+        struct json_object *neutral;
+        if (json_object_object_get_ex(mpu, "neutral", &neutral)) {
+            struct json_object *nx, *ny, *nz;
+            if (json_object_object_get_ex(neutral, "x", &nx))
+                gyro_neutral_x = json_object_get_double(nx);
+            if (json_object_object_get_ex(neutral, "y", &ny))
+                gyro_neutral_y = json_object_get_double(ny);
+            if (json_object_object_get_ex(neutral, "z", &nz))
+                gyro_neutral_z = json_object_get_double(nz);
+        }
     }
 
     json_object_object_foreach(root, key, val) {
@@ -166,9 +179,9 @@ static void read_gyro_vals(int fd, double *ax, double *ay, double *az,
     *ax = ax_raw / 16384.0;
     *ay = ay_raw / 16384.0;
     *az = az_raw / 16384.0;
-    *gx = gx_raw / 131.0;
-    *gy = gy_raw / 131.0;
-    *gz = gz_raw / 131.0;
+    *gx = (gx_raw / 131.0) - gyro_neutral_x;
+    *gy = (gy_raw / 131.0) - gyro_neutral_y;
+    *gz = (gz_raw / 131.0) - gyro_neutral_z;
 }
 
 /* ====================== ULTRASONIC READ ========================= */

@@ -1,0 +1,214 @@
+# brain.py
+
+CLIFF_THRESHOLD_CM = 100.0
+
+import json
+import os
+import asyncio
+import time
+
+# Load object preferences from config
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CFG_PATH = os.path.join(BASE_DIR, "cfg", "objectConfig.json")
+try:
+    with open(CFG_PATH, "r") as f:
+        _cfg = json.load(f)
+    HAPPY_OBJECTS = set(_cfg.get("like", []))
+    SCARY_OBJECTS = set(_cfg.get("dislike", []))
+except Exception as e:
+    print(f"[brain] objectConfig.json load failed: {e}")
+    HAPPY_OBJECTS = set()
+    SCARY_OBJECTS = set()
+
+class Brain:
+    def __init__(self):
+        pass
+
+    def _get_front_back(self, distances):
+        """distances = [front, back] 형태를 안전하게 파싱"""
+        if not distances:
+            return 9999.0, 9999.0
+        front = float(distances[0]) if len(distances) > 0 else 9999.0
+        back = float(distances[1]) if len(distances) > 1 else 9999.0
+        return front, back
+
+    def decide_emotion(self, sensor):
+        """
+        센서값으로 감정만 결정 (움직임은 act()에서 따로 결정)
+        """
+        obj = sensor.get("object")
+        gyro = sensor.get("gyro") or (0.0, 0.0, 0.0)
+        distances = sensor.get("distances") or [9999.0, 9999.0]
+        front, back = self._get_front_back(distances)
+
+        # 0) 앞뒤 모두 낭떠러지 근접 → 패닉
+        if front > CLIFF_THRESHOLD_CM and back > CLIFF_THRESHOLD_CM:
+            return "panic"
+
+        # 1) 자이로 값 중 하나라도 50 초과 → dizzy
+        if max(abs(g) for g in gyro) > 50:
+            return "dizzy"
+
+        # 2) 위험 물체 → scary
+        if obj in SCARY_OBJECTS:
+            return "scary"
+
+        # 3) (선택) 뒤쪽 거리가 매우 멀면 불안 → scary
+        if back >= 200:
+            return "scary"
+
+        # 4) 좋아하는 물체 → happy
+        if obj in HAPPY_OBJECTS:
+            return "happy"
+
+        # 5) 나머지 → neutral
+        return "neutral"
+
+    def act(self, sensor):
+        """
+        최종 모터값 + 감정 반환
+        (left, right, emotion)
+        """
+        emotion = self.decide_emotion(sensor)
+
+        distances = sensor.get("distances") or [9999.0, 9999.0]
+        front, back = self._get_front_back(distances)
+
+        left = 0.0
+        right = 0.0
+
+        # 🔴 안전 우선: 패닉 / 낭떠러지 근접시 완전 정지
+        if emotion == "panic":
+            return 0.0, 0.0, emotion
+
+        # 🤢 어지러움: 그냥 멈춤 (원하면 나중에 빙글빙글 회전 패턴 추가 가능)
+        if emotion == "dizzy":
+            return 0.0, 0.0, emotion
+
+        # 😱 무서움: 기본은 뒤로 가기, 단 뒤쪽 낭떠러지면 정지
+        if emotion == "scary":
+            if back < CLIFF_THRESHOLD_CM:
+                left = -20.0
+                right = -20.0
+            else:
+                left = right = 0.0
+
+        # 😄 행복: 기본은 앞으로 가기, 단 앞쪽 낭떠러지면 정지
+        elif emotion == "happy":
+            if front < CLIFF_THRESHOLD_CM:
+                left = 20.0
+                right = 20.0
+            else:
+                left = right = 0.0
+
+        # 😐 중립: 그냥 멈춤
+        elif emotion == "neutral":
+            left = right = 0.0
+
+        # 최종 모터 값 클리핑 (-100 ~ 100)
+        left = max(-100.0, min(100.0, left))
+        right = max(-100.0, min(100.0, right))
+
+        return left, right, emotion
+
+# ---------------------------------------------------------
+# Async Sensor Runner (Singleton)
+# ---------------------------------------------------------
+class BrainRunner:
+    _instance = None
+
+    @staticmethod
+    def get():
+        if BrainRunner._instance is None:
+            BrainRunner._instance = BrainRunner()
+        return BrainRunner._instance
+
+    def __init__(self):
+        if BrainRunner._instance is not None:
+            return
+        self.brain = Brain()
+
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.sensor_path = os.path.join(base, "sensor", "sensor_state")
+        self.yolo_path = os.path.join(base, "sensor", "yolo_obj")
+
+        self.current_label = None
+        self.last_label_time = 0
+
+    def _read_sensor_state(self):
+        try:
+            with open(self.sensor_path, "r") as f:
+                data = json.load(f)
+            distances = [data.get("ultrasonic_1", -1.0), data.get("ultrasonic_2", -1.0)]
+            gyro = tuple(data.get("gyro", (0.0, 0.0, 0.0)))
+            return distances, gyro
+        except:
+            return [9999.0, 9999.0], (0.0, 0.0, 0.0)
+
+    def _read_yolo_obj(self):
+        """
+        yolo_obj 파일에 여러 줄이 있을 경우 모두 읽어서 리스트로 반환.
+        가장 최근 레이블은 self.current_label 로 관리.
+        """
+        try:
+            with open(self.yolo_path, "r") as f:
+                lines = [ln.strip() for ln in f.read().splitlines() if ln.strip()]
+        except:
+            return []
+
+        # Empty file
+        if not lines:
+            return []
+
+        # 갱신된 YOLO 결과는 맨 위 첫 줄이라고 가정
+        self.current_label = lines[0]
+        self.last_label_time = time.time()
+
+        # 3초 decay 적용 — 기간 지나면 전체 리셋
+        if time.time() - self.last_label_time > 3.0:
+            return []
+
+        return lines
+
+    async def loop(self, interval=0.2):
+        while True:
+            distances, gyro = self._read_sensor_state()
+            objs = self._read_yolo_obj()
+
+            sensor = {
+                "object": objs[0] if objs else None,
+                "gyro": gyro,
+                "distances": distances
+            }
+
+            left, right, emotion = self.brain.act(sensor)
+            print("[BrainRunner]", sensor, "=>", left, right, emotion)
+
+            await asyncio.sleep(interval)
+
+# ---------------------------------------------------------
+# Debug: read files once and print values
+# ---------------------------------------------------------
+if __name__ == "__main__":
+    runner = BrainRunner.get()
+
+    # read sensor_state
+    try:
+        with open(runner.sensor_path, "r") as f:
+            data = json.load(f)
+        distances = [
+            data.get("ultrasonic_1", -1.0),
+            data.get("ultrasonic_2", -1.0)
+        ]
+        gyro = tuple(data.get("gyro", (0.0, 0.0, 0.0)))
+        print("[DEBUG] sensor_state =", distances, gyro)
+    except Exception as e:
+        print(f"[DEBUG] sensor_state read error: {e}")
+
+    # read yolo_obj (print all lines)
+    try:
+        with open(runner.yolo_path, "r") as f:
+            lines = [ln.strip() for ln in f.read().splitlines() if ln.strip()]
+        print("[DEBUG] yolo_obj lines =", lines)
+    except Exception as e:
+        print(f"[DEBUG] yolo_obj read error: {e}")

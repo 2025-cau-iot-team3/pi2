@@ -1,12 +1,53 @@
 {
-  "like": {
-    "toy": 1,
-    "friend": 1,
-    "cat": 1
-  },
-  "dislike": {
-    "human": 1,
-    "dog": 1,
-    "obstacle": 1
-  }
+  "like": [
+    "person",
+    "toothbrush",
+    "cat",
+    "dog"
+  ],
+  "dislike": [
+    "fork",
+    "knife",
+    "spoon"
+  ],
+  "neutral": [
+    "bottle",
+    "cup",
+    "bowl",
+    "chair",
+    "couch",
+    "bed",
+    "tv",
+    "laptop",
+    "mouse",
+    "keyboard",
+    "cell phone",
+    "book",
+    "clock",
+    "toilet",
+    "potted plant",
+    "dining table",
+    "refrigerator",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "remote",
+    "vase",
+    "teddy bear",
+    "hair drier",
+    "wine glass",
+    "cake",
+    "pizza",
+    "carrot",
+    "apple",
+    "banana",
+    "broccoli",
+    "orange",
+    "handbag",
+    "suitcase",
+    "backpack",
+    "umbrella"
+  ]
 }
+

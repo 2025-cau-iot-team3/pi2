@@ -1,240 +1,68 @@
-# Tiny-RNN
+# pi2 로봇 컨트롤 시스템
 
-이 프로젝트는 라즈베리파이 기반의 초경량 RNN(진화전략 기반) 로봇 제어 시스템입니다.  
-센서 입력(거리, 사물 종류, 자이로, 밝기)을 Tiny RNN이 받아서  
-좌/우 트랙 속도(각각 -100~100)를 직접 결정하고  
-TB6612FNG 모터 드라이버를 통해 실제 이동을 수행합니다.
+라즈베리파이에서 자이로/초음파 센서를 읽어 공유 파일에 기록하고, 간단한 규칙 기반 브레인이 모터 속도를 결정합니다. 웹소켓 클라이언트(`pi2_client.py`)로 다른 Pi 서버와 통신해 YOLO 라벨을 받고, 로컬 모터 드라이버에 명령을 전달합니다.
 
----
+## 전체 흐름
+- `sensor/sensor_daemon`이 `cfg/sensorConfig.json`을 읽어 MPU6050 + 초음파 값을 주기적으로 측정하고 `sensor/sensor_state`(JSON)에 기록.
+- YOLO 라벨을 줄 단위로 `sensor/yolo_obj`에 쓰면 브레인이 감정/동작을 결정.
+- `sensor/brain.py`의 `BrainRunner`가 `sensor_state`/`yolo_obj`를 읽어 감정/모터 명령을 계산.
+- `motor/move_daemon`이 `motor/motor_cmd`를 감시해 TB6612FNG를 구동하고, `motor/move.py`가 파일에 좌우 속도를 기록.
+- `pi2_client.py`는 외부 서버(기본 `ws://192.168.0.22:8000`)와 연결해 브레인 루프를 띄우고, 원격 명령/YOLO 결과를 주고받습니다.
 
-## 📌 프로젝트 파일 구조
+## 디렉터리 개요
+- `sensor/`  
+  - `sensor_daemon.c` / `sensor_state` / `yolo_obj` : 센서 데몬 소스와 출력 파일  
+  - `sensor.py` : `sensor_state` 파서  
+  - `brain.py` : 규칙 기반 브레인 + `BrainRunner` 비동기 루프
+- `motor/`  
+  - `move_daemon.c` / `move_daemon` : `motor_cmd` 감시 → TB6612FNG 제어  
+  - `move.py` : `motor_cmd`에 좌우 속도(-100~100) 기록 유틸  
+  - `motorInit.py` : 기존 데몬/`pigpiod` 정리 후 `move_daemon`를 sudo로 구동
+- `cfg/` : `sensorConfig.json`(MPU6050/초음파 핀, 자이로 neutral), `objectConfig.json`(선호/비선호 라벨), `motorConfig.json`, `alarmConfig.json`
+- `util/clock.py` : 시간/날짜/알람/날씨 CLI
+- `pi2_client.py` : 웹소켓 하드웨어 클라이언트(브레인 루프와 연동)
 
-```
-pi2/
- ├─ logs/
- ├─ motor/
- │   ├─ move              # 좌/우 속도 명령을 motor_cmd에 기록하는 바이너리
- │   ├─ move_daemon       # pigpio 기반 모터 제어 데몬
- │   ├─ motorInit.py      # 데몬/서비스 초기화 스크립트
- │   ├─ move.c
- │   └─ move_daemon.c
- ├─ sensor/
- │   ├─ gyro.c            # MPU6050를 C로 읽어 gyro_state에 기록
- │   ├─ ultrasonic.c      # 초음파를 C로 읽어 ultra_state에 기록
- │   ├─ sensor_daemon.c   # 자이로+초음파를 통합 폴링해 sensor_state에 기록
- │   ├─ ultrasonic.py     # 초음파 센서 읽기
- │   ├─ gyro.py           # MPU6050 자이로/가속도
- │   ├─ sensor_daemon.py  # 센서 값 캐싱 데몬
- │   └─ test.py           # 간단한 센서 테스트
- ├─ util/
- │   └─ clock.py
- ├─ cfg/
- │   ├─ objectConfig.json  # object 문자열을 like/dislike로 구분
- │   ├─ motorConfig.json   # TB6612FNG 핀 매핑
- │   ├─ sensorConfig.json  # 초음파 핀/주소 설정
- │   └─ alarmConfig.json   # 알람 설정
- └─ rnn/
-     ├─ brain.py
-     ├─ brain_es.py
-     ├─ tiny_rnn.py
-     └─ trainer.py
-```
+## 사전 설정
+1. `cfg/sensorConfig.json`에서 MPU6050 I2C 버스/주소, 초음파 `trigger_pin`/`echo_pin`, `neutral` 오프셋을 하드웨어에 맞게 수정.
+2. `cfg/motorConfig.json`(또는 동일 내용을 `motor/motorConfig.json`에 반영)에서 TB6612FNG 핀 매핑 확인.
+3. `cfg/objectConfig.json`에 좋아하는 라벨(`like`) / 피하고 싶은 라벨(`dislike`)을 입력.
+4. 웹소켓 서버 IP가 다르면 `pi2_client.py`의 `PI_1_IP`를 수정.
 
----
-
-## 📄 파일 설명
-
-### 1. `rnn/tiny_rnn.py`
-라즈베리파이에서 구동 가능한 초경량 Tiny RNN 모델 구현 파일입니다.
-- 입력: 센서 정보(거리, 물체종류, 자이로, 밝기)
-- 출력: 좌/우 트랙 속도(-100~100)
-- numpy 기반 순전파(forward)만 구현  
-- 역전파(backprop) 없음 — 학습은 ES로 수행
-
-#### 사용법
-```python
-from rnn.tiny_rnn import TinyRNN
-rnn = TinyRNN(input_size=6, hidden_size=8, output_size=2)
-output = rnn.step([0.1, 0, 0.0, 0.0, 0.0, 0.5])
-print(output)  # 좌/우 속도 원시 출력
-```
-
----
-
-### 2. `rnn/brain.py`
-Tiny RNN을 감싸는 고수준 인터페이스.
-- RNN 초기화  
-- 가중치 가져오기 / 설정하기  
-- 상태 입력 → 행동 출력(`act()`)
-- `cfg/objectConfig.json`의 like/dislike 리스트를 사용해 object 문자열을 스칼라(1 / -1 / 0)로 인코딩
-
-#### 사용법
-```python
-from rnn.brain import Brain
-brain = Brain()
-action = brain.act({
-    "dist": 50,
-    "object": 1,
-    "gyro": (0.0, 0.0, 0.0),
-    "brightness": 0.4
-})
-print(action)
-```
-
----
-
-### 3. `rnn/brain_es.py`
-유전 알고리즘 기반 **Evolution Strategy (ES)** 구현.
-- population 생성
-- 각 개체별 노이즈 적용
-- 보상 기반 가중치 업데이트
-- Tiny RNN 학습 담당
-
-#### 사용법
-```python
-from rnn.brain_es import EvolutionStrategy
-weights = [...]  # TinyRNN.get_weights() 결과
-es = EvolutionStrategy(weights, sigma=0.1, lr=0.03, population=5)
-noises = es.ask()
-# 보상 계산 후
-updated = es.update(noises, rewards=[0.1]*len(noises))
-```
-
----
-
-### 4. `rnn/trainer.py`
-Tiny RNN + ES 학습 엔진.
-- population 단위 평가, 세대별 로그 출력
-- 로그 파일 자동 저장(`logs/es_train_*.log`)
-- `sensor/ultrasonic.py`, `sensor/gyro.py`를 통해 센서 값을 읽고  
-  `motor/move` 바이너리를 호출해 좌/우 속도 명령을 전송
-
-#### 사용법
+## 빌드 및 실행
+1) 센서 데몬 빌드/실행 (`sensor/` 디렉터리)  
 ```bash
-# 기본 10세대 학습
-python3 rnn/trainer.py
-
-# 50세대 학습
-python3 rnn/trainer.py 50
+cd sensor
+gcc sensor_daemon.c -o sensor_daemon -ljson-c -lpigpio -lrt -pthread
+sudo ./sensor_daemon       # 기본 20 Hz, sensor_state 생성
+# sudo ./sensor_daemon 10   # 주기를 10 Hz로 조정할 때
 ```
 
----
-
-### 5. `sensor/ultrasonic.py`
-초음파 센서를 읽어 거리를 반환.
-- `cfg/sensorConfig.json`에서 type이 `distance`인 센서를 자동 탐색
-- `read(name)`, `read_all()` 제공
- - `sensor_daemon.c`가 실행 중이면 캐시된 값을 활용해 입출력 부하를 줄일 수 있음
-
-#### 사용법
-```python
-from sensor.ultrasonic import read_all
-print(read_all())
-```
-
----
-
-### 6. `sensor/gyro.py`
-MPU6050 가속도/자이로를 읽어 튜플 `(acc, gyro)` 반환.
-
-#### 사용법
-```python
-from sensor.gyro import read
-acc, gyro = read()
-print(acc, gyro)
-```
-
----
-
-### 7. `sensor/gyro.c` & `sensor/ultrasonic.c`
-센서 값을 C로 직접 폴링해 프로젝트 루트의 확장자 없는 state 파일에 기록.
-- gyro → `./gyro_state`
-- ultra → `./ultra_state`
-- `rnn/trainer.py`는 해당 state가 있으면 하드웨어 I/O 없이 즉시 사용
-
-#### 빌드/사용 예시
-```bash
-# gyro (기본 50Hz)
-gcc sensor/gyro.c -o sensor/gyro -ljson-c
-sudo ./sensor/gyro 100   # 100Hz 폴링
-
-# ultrasonic (기본 20Hz)
-gcc sensor/ultrasonic.c -o sensor/ultrasonic -ljson-c -lpigpio -lrt -pthread
-sudo ./sensor/ultrasonic 40   # 40Hz 폴링
-```
-
----
-
-### 8. `cfg/sensorConfig.json`
-센서 핀/주소 설정.
-- 초음파 센서 trigger/echo BCM 핀과 timeout 설정  
-- mpu6050 버스/주소 설정
-
----
-
-### 9. `motor/` (`move`, `move_daemon`, `motorInit.py`)
-- `move`: `--left/-l`, `--right/-r` 옵션으로 좌우 속도를 설정하면 `motor_cmd`에 기록하는 바이너리
-- `move_daemon`: `motor_cmd`를 감시하며 pigpio로 실제 모터 제어
-- `motorInit.py`: 이전 프로세스 종료 후 `move_daemon`을 기동하는 스크립트
-- `cfg/motorConfig.json`: TB6612FNG 핀 매핑 저장
-
-#### 사용법
+2) 모터 데몬 실행 (`motor/` 디렉터리)  
 ```bash
 cd motor
-python3 motorInit.py  # sudo 필요
-./move --left 60 --right 60
+gcc move_daemon.c -o move_daemon -ljson-c -lpigpio -lrt -pthread   # 필요 시 빌드
+python3 motorInit.py       # 기존 프로세스/피지피아이오 정리 후 sudo로 데몬 실행
+python3 -c "from move import set_motor; set_motor(30, 30)"  # 수동 테스트
 ```
 
----
-
-### 10. `util/clock.py` (`cfg/alarmConfig.json`)
-현재 시간/날짜 계산 및 알람 로직.
-- 알람 추가/삭제/목록 관리 시 `cfg/alarmConfig.json`을 업데이트
-
-#### 사용법
+3) 브레인 루프 단독 테스트  
 ```bash
-python3 util/clock.py time
-python3 util/clock.py add 08:00 모닝콜
-python3 util/clock.py list
+python3 - <<'PY'
+from sensor.brain import BrainRunner
+import asyncio
+asyncio.run(BrainRunner.get().loop(0.5))
+PY
+# sensor_state, yolo_obj 값을 변경하면 터미널에 (left, right, emotion) 로그가 찍힙니다.
 ```
 
----
-
-### 11. `sensor/sensor_daemon.c`
-자이로+초음파를 C로 통합 폴링해 루트 `sensor_state`에 기록하는 데몬.
-- `rnn/trainer.py`가 최우선으로 읽는 상태 파일
-
-#### 빌드/사용 예시
+4) 웹소켓 클라이언트(Pi 서버 연동)  
 ```bash
-gcc sensor/sensor_daemon.c -o sensor/sensor_daemon -ljson-c -lpigpio -lrt -pthread -li2c
-sudo ./sensor/sensor_daemon 40   # 40Hz 폴링, 기본 20Hz
+python3 pi2_client.py
 ```
 
-> 참고: 파이썬 버전(`sensor_daemon.py`)은 빠른 테스트용으로 남겨둠.
-
-#### 파이썬 테스트용
-```bash
-# 20Hz 폴링(기본)
-python3 sensor/sensor_daemon.py
-
-# 50Hz 폴링
-python3 sensor/sensor_daemon.py --hz 50
-```
-
----
-
-### 12. `logs/`
-ES 학습 로그 자동 저장.
-- `rnn/trainer.py` 실행 시 `logs/es_train_YYYY-MM-DD_HH-MM-SS.log` 생성
-- 최신 학습 기록 확인: `tail -f logs/es_train_*.log`
-
----
-
-## 🚀 사용 예시
-
-- 기본 학습: `python3 rnn/trainer.py`  
-- 50세대 학습: `python3 rnn/trainer.py 50`  
-- 모터 데몬 구동: `cd motor && python3 motorInit.py` 실행 후 `./move --left 50 --right 50`  
-- 센서 테스트: `python3 sensor/test.py`
-
----
+## 파일 포맷 참고
+- `sensor/sensor_state` 예시  
+  ```json
+  {"ultrasonic_1": 120.0, "ultrasonic_2": 150.0, "gyro": [0.1, -0.2, 0.0], "ts": 1763970671}
+  ```
+- `sensor/yolo_obj` : 각 줄에 감지된 라벨(신뢰도 높은 순). 비어 있으면 브레인은 객체 없이 동작.

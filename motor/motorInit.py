@@ -27,32 +27,24 @@ def kill_process(name):
     except subprocess.CalledProcessError:
         print(f"[INFO] No '{name}' process found.")
 
+def init():
+    print("=== motorInit.init() START ===")
+    kill_process("move_daemon")
+    kill_process("pigpiod")
+    run("sudo rm -f /var/run/pigpio.pid")
+    run("sudo rm -f /run/pigpio.pid")
+    print("[INFO] pigpiod removed (direct mode)")
+    daemon_path = os.path.join(os.path.dirname(__file__), "move_daemon")
+    if not os.path.isfile(daemon_path):
+        print(f"[ERROR] move_daemon not found at {daemon_path}.")
+        return False
+    print("[INFO] Starting move_daemon...")
+    subprocess.Popen(["sudo", daemon_path], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    time.sleep(1)
+    print("\n=== Process Check ===")
+    run("ps aux | grep move_daemon")
+    print("=== motorInit.init() DONE ===")
+    return True
 
-print("=== motorInit.py START ===")
-
-# 1) 기존 move_daemon 종료
-kill_process("move_daemon")
-
-# 2) 기존 pigpiod 종료
-kill_process("pigpiod")
-
-# 3) PID 파일 제거
-run("sudo rm -f /var/run/pigpio.pid")
-run("sudo rm -f /run/pigpio.pid")
-
-print("[INFO] pigpiod removed (direct mode)")
-
-# 4) move_daemon 실행
-if not os.path.isfile("./move_daemon"):
-    print("[ERROR] move_daemon not found in current directory.")
-    exit(1)
-
-print("[INFO] Starting move_daemon...")
-p = subprocess.Popen(["sudo", "./move_daemon"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-time.sleep(1)
-
-print("\n=== Process Check ===")
-run("ps aux | grep move_daemon")
-
-print("=== motorInit.py DONE ===")
+if __name__ == "__main__":
+    init()
