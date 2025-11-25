@@ -15,7 +15,7 @@ clients = {}
 
 # [중요] Pi 2와 유선으로 연결된 IP 주소 입력
 # (예: 크로스 케이블 연결 시 Pi 1의 고정 IP)
-PI_1_IP = "192.168.0.22" 
+PI_1_IP = "mypi3.local" 
 URI = f"ws://{PI_1_IP}:8000"
 
 async def keep_thinking_loop():
