@@ -1,40 +1,44 @@
 #!/bin/bash
+set -e
 
-# 절대경로 기준 설정
-BASE="/home/iot/pi2"
+BASE="$(cd "$(dirname "$0")" && pwd)"
 
-# --------------------------
-# 0) 가상환경 활성화
-# --------------------------
-source "$BASE/venv/bin/activate"
-
-# --------------------------
-# 1) motor/move_daemon 실행
-#    - pigpio ON
-# --------------------------
-cd "$BASE/motor"
-"$BASE/motor/move_daemon" &
-MOVE_PID=$!
+echo "============================================="
+echo "  PI2 INIT SCRIPT START"
+echo "  BASE = $BASE"
+echo "============================================="
 
 # --------------------------
-# 2) sensor/sensor_daemon 실행
-#    - pigpio OFF 모드 강제
+# 1) Python venv 활성화
 # --------------------------
-cd "$BASE/sensor"
-PIGPIO_NO_INIT=1 "$BASE/sensor/sensor_daemon" 20 &
-SENSOR_PID=$!
+if [ -f "$BASE/venv/bin/activate" ]; then
+    echo "[INFO] Activating venv..."
+    source "$BASE/venv/bin/activate"
+else
+    echo "[ERROR] venv not found at $BASE/venv"
+    exit 1
+fi
 
 # --------------------------
-# 3) 메인 Python 클라이언트 실행
+# 2) motorInit.py 실행
 # --------------------------
-cd "$BASE"
+echo "[INFO] Running motorInit.py ..."
+python3 "$BASE/motor/motorInit.py"
+
+sleep 1
+
+# --------------------------
+# 3) pi2_client.py 실행
+# --------------------------
+echo "[INFO] Starting pi2_client.py ..."
 python3 "$BASE/pi2_client.py"
 
 # --------------------------
-# 4) python 종료되면 데몬들 정리
+# 4) 종료 처리
 # --------------------------
-echo "Stopping daemons..."
-kill $MOVE_PID
-kill $SENSOR_PID
+echo "[INFO] pi2_client.py exited. Cleaning up..."
+# motorInit.py already kills old daemons, so no explicit kill needed here.
 
-echo "Done."
+echo "============================================="
+echo "  INIT DONE"
+echo "============================================="

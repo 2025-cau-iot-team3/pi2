@@ -1,0 +1,6 @@
+{
+    "MOTOR_LEFT": { "IN1": 5, "IN2": 6, "PWM": 13 },
+    "MOTOR_RIGHT": { "IN1": 23, "IN2": 24, "PWM": 18 },
+    "SERVO_LEFT":  { "PIN": 27 },
+    "SERVO_RIGHT": { "PIN": 17 }
+}

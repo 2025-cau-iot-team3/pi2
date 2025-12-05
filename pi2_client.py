@@ -15,7 +15,7 @@ clients = {}
 
 # [중요] Pi 2와 유선으로 연결된 IP 주소 입력
 # (예: 크로스 케이블 연결 시 Pi 1의 고정 IP)
-PI_1_IP = "mypi3.local" 
+PI_1_IP = "192.168.0.137" 
 URI = f"ws://{PI_1_IP}:8000"
 
 async def keep_thinking_loop():
@@ -38,7 +38,7 @@ async def run_hardware_client():
         print("등록 요청 전송 완료")
 
         # Start BrainRunner loop asynchronously
-        asyncio.create_task(keep_thinking_loop())
+        # asyncio.create_task(keep_thinking_loop())
 
         # 2. [수신 대기] 명령 기다림
         async for message in websocket:
@@ -59,8 +59,8 @@ async def run_hardware_client():
                 elif cmd == "yolo_detection":
                     objects = payload.get("objects", [])
                     print(f"YOLO 감지됨! ({len(objects)}개)")
-                    for obj in objects:
-                        print(f"   - {obj['label']} ({obj['confidence']})")
+                    # for obj in objects:
+                        # print(f"   - {obj['label']} ({obj['confidence']})")
                     # TODO: LCD에 표시하거나 스피커로 알림
 
                     # Save plain labels to action/yolo_obj (sorted by confidence desc)
